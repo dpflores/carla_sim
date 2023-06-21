@@ -6,6 +6,5 @@ Para descargar el comprimido en Windows, utilizar el siguiente link: [Carla_Wind
 Para la instalación en Ubuntu o Windows, seguir la guía en el siguiente archivo: [SetupGuide](CARLA-SetupGuide-Ubuntu.pdf)
 
 
-```
-Nota: Esta simulación se basa en el curso de la Universidad de Toronto en Coursera y se ha escogido por los mapas personalizados y su ligereza.
-```
+
+**Nota**: Esta simulación se basa en el curso de la Universidad de Toronto en Coursera y se ha escogido por los mapas personalizados y su ligereza.
