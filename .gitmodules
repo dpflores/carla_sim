@@ -1,3 +1,0 @@
-[submodule "src/control/vehicle_control"]
-	path = src/control/vehicle_control
-	url = https://github.com/dpflores/vehicle-control
