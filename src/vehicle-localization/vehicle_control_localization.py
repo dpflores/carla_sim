@@ -41,6 +41,10 @@ from carla.settings   import CarlaSettings
 from carla.tcp        import TCPConnectionError
 from carla.controller import utils
 
+
+GPS_VAR = 0.2
+IMU_VAR = 0.3
+ODOM_VAR = 0.1
 """
 Configurable params
 """
@@ -465,7 +469,7 @@ def exec_waypoint_nav_demo(args):
         steer = 0
 
         # START FILTER
-        filter = estimator.PositionSpeedFilter(dt=0.023, x_init=start_x, y_init=start_y, vx_init=0, vy_init=0, var_imu=0.3)
+        filter = estimator.PositionSpeedFilter(dt=0.023, x_init=start_x, y_init=start_y, vx_init=0, vy_init=0, var_model=IMU_VAR)
 
         #############################################
         # Vehicle Trajectory Live Plotting Setup
@@ -564,6 +568,8 @@ def exec_waypoint_nav_demo(args):
         closest_index    = 0  # Index of waypoint that is currently closest to
                               # the car (assumed to be the first index)
         closest_distance = 0  # Closest distance of closest waypoint to car
+
+        count = 0
         for frame in range(TOTAL_EPISODE_FRAMES):
             # Gather current data from the CARLA server
             measurement_data, sensor_data = client.read_data()
@@ -582,11 +588,11 @@ def exec_waypoint_nav_demo(args):
             x_est, y_est = filter.prediction_update(x_accel, y_accel)
 
             if count == 45:
-                x_est, y_est = filter.measurement_update(x_gps, y_gps)
+                x_est, y_est = filter.measurement_update(x_gps, y_gps, GPS_VAR)
                 count = 0
             count += 1
 
-
+            print(x_est, y_est)
             current_timestamp = float(measurement_data.game_timestamp) / 1000.0
 
             # Wait for some initial time before starting the demo

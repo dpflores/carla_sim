@@ -1,73 +1,69 @@
+import numpy as np
+
 from kalman import ExtendedFilter
 
 class PositionSpeedFilter:
     def __init__(self, dt, x_init, y_init, vx_init, vy_init, var_model):
         # Frecuencia de muestreo
-
+        self.dt = dt
         # Valores iniciales
         self.xk = np.array([[x_init, y_init, vx_init, vy_init]]).T   
         self.uk = np.array([[0.0, 0.0]]).T  
-        self.Pk = var_model*np.eye(3)
+        self.Pk = var_model*np.eye(4)
 
         # Matrices caracteristicas (estas son constantes, pero Hk no)
 
         self.F = np.eye(4)
-        self.F[:2, 2:4] = dt * np.eye(4)
+        self.F[:2, 2:4] = dt * np.eye(2)
         self.L = np.zeros((4,2))
         self.L[2:,:] = np.eye(2)
-        self.Q = var_imu_f * dt**2 * np.eye(2)
+        self.Q = var_model * dt**2 * np.eye(2)
 
 
-        self.H = np.zeros((3,6))
-        self.H[:3,:3] = np.eye(3)
-        I = np.eye(3)
+        self.H = np.zeros((2,4))
+        self.H[:2,:2] = np.eye(2)
+        I = np.eye(2)
         self.M = I
         
 
 
         # Inicializando filtro de kalman
-        self.filter = kalman.ExtendedFilter(self.xk, self.uk, self.Pk)
+        self.filter = ExtendedFilter(self.xk, self.uk, self.Pk)
 
 
     def prediction_update(self, x_accel, y_accel):
         # En esta funcion se haran las predicciones
         # Primero hace la predicción con lo que ya tenemosf
-        C_ns = np.eye(2) # El simulador CARLA ya realiza las transformaciones con respecto al sistema que queremos
+        p_est = self.filter.xk[:2]
+        v_est = self.filter.xk[2:]
+
+        C_ns = np.eye(2) # El simulador CARLA ya realiza las transformaciones con respecto al sistema que queremos 
+        accels = np.array([x_accel, y_accel])
+
+        p_est = p_est + self.dt*v_est + 0.5*(self.dt**2)*(C_ns @ accels)
+
+        v_est = v_est + self.dt*(C_ns@accels)
 
 
-        p_est = p_est[k-1] + delta_t*v_est[k-1] + 0.5*(delta_t**2)*(C_ns@imu_f["data"][k-1])
-
-        v_est[k] = v_est[k-1] + delta_t*(C_ns@imu_f["data"][k-1])
-
-
-        f = np.hstack((p_est[k], v_est[k])).T
+        f = np.hstack((p_est, v_est)).T
     
-        filter.prediction_step(f,F,L,Q)
-        return x_est, y_est
+        self.filter.prediction_step(f,self.F,self.L,self.Q)
+
+        return self.xk[0], self.xk[1]
 
         
 
 
-    def measurement_update(self, x_gps, y_gps):
+    def measurement_update(self, x_pos, y_pos, sensor_var):
         # En esta funcion se haran las correcciones
+        I = np.eye(2)
         self.R = I * sensor_var
 
+        y_k = np.array([[x_pos],[y_pos]])
+        p_check = self.filter.xk[:2]
 
-        vx = self.speed_filter.xk[0,0]
-        vy = self.speed_filter.xk[1,0]
-        vz = self.speed_filter.xk[2,0]
+        self.filter.correction_step(yk=y_k,h=p_check, Hk=self.H,Mk=self.M, R=self.R)
 
-        # if vx<0.0001:
-        #     vx = 0.0001
-        va = (vx**2 + vy**2 + vz**2)**(-1/2)    # constante solo para facilitar el trabajo
-
-        h = np.sqrt(vx**2 + vy**2 + vz**2)
-
-        self.Hk = np.array([[vx*va, vy*va, vz*va]])
-
-        # Primero hace la correción con lo que ya tenemos
-        self.filter.correction_step(h, self.Hk,self.Mk, self.Rk)
-
-        return x_est, y_est
+        return self.xk[0], self.xk[1]
 
 
