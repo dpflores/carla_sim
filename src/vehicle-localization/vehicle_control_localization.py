@@ -559,7 +559,7 @@ def exec_waypoint_nav_demo(args):
             ### AÑADIDO PARA LOCALIZACION (VALORES ACTUALES)
             x_gps, y_gps, yaw_imu, speed_odom = add_noise(current_x, current_y, current_yaw, current_speed)
             x_accel, y_accel, z_accel = get_current_accel(measurement_data)
-            ### FALTA EL STEERING
+
 
             current_timestamp = float(measurement_data.game_timestamp) / 1000.0
 
