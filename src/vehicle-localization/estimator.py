@@ -1,57 +1,58 @@
 from kalman import ExtendedFilter
 
 class PositionSpeedFilter:
-    def __init__(self):
+    def __init__(self, dt, x_init, y_init, vx_init, vy_init, var_model):
         # Frecuencia de muestreo
-        self.dta = 0.1
-        self.dt = np.array([[self.dta]])
 
         # Valores iniciales
-        self.xk = np.array([[0.0001, 0.0001, 0.0001]]).T    
-        self.yk = np.array([[0.0001]])
-        self.uk = np.array([[0.0, 0.0, 0.0]]).T  
-        self.Pk = 0.1*np.eye(3)
+        self.xk = np.array([[x_init, y_init, vx_init, vy_init]]).T   
+        self.uk = np.array([[0.0, 0.0]]).T  
+        self.Pk = var_model*np.eye(3)
 
         # Matrices caracteristicas (estas son constantes, pero Hk no)
-        self.Fk = np.eye(3)
-        self.Lk = np.eye(3)
-        self.Mk = np.array([[1.0]])
+
+        self.F = np.eye(4)
+        self.F[:2, 2:4] = dt * np.eye(4)
+        self.L = np.zeros((4,2))
+        self.L[2:,:] = np.eye(2)
+        self.Q = var_imu_f * dt**2 * np.eye(2)
+
+
+        self.H = np.zeros((3,6))
+        self.H[:3,:3] = np.eye(3)
+        I = np.eye(3)
+        self.M = I
         
-        # Valores de covarianza 
-        self.Qk = (self.dta**2)*np.eye(3)         # De nuestro modelo
-        self.Rk = np.array([[0.1]])             # De la medición
+
 
         # Inicializando filtro de kalman
-        self.speed_filter = kalman.ExtendedFilter(self.xk, self.yk, self.uk, self.Pk)
+        self.filter = kalman.ExtendedFilter(self.xk, self.uk, self.Pk)
 
-        # Subscriptores a los tópicos de velocidad
-        rospy.Subscriber("/gps_speed", Float32, self.gps_callback)
-        rospy.Subscriber("/imu_accel_vector", Imu, self.imu_callback)
 
-        # Publicador de la velocidad filtrada
-        self.vel_filtrada_pub = rospy.Publisher("speed_filtered", Float32, queue_size=10)
-
-    def imu_callback(self, data):
+    def prediction_update(self, x_accel, y_accel):
         # En esta funcion se haran las predicciones
         # Primero hace la predicción con lo que ya tenemosf
-        f = self.speed_filter.xk + self.dta*self.speed_filter.uk
+        C_ns = np.eye(2) # El simulador CARLA ya realiza las transformaciones con respecto al sistema que queremos
+
+
+        p_est = p_est[k-1] + delta_t*v_est[k-1] + 0.5*(delta_t**2)*(C_ns@imu_f["data"][k-1])
+
+        v_est[k] = v_est[k-1] + delta_t*(C_ns@imu_f["data"][k-1])
+
+
+        f = np.hstack((p_est[k], v_est[k])).T
+    
+        filter.prediction_step(f,F,L,Q)
+        return x_est, y_est
+
         
-        self.speed_filter.prediction_step(f, self.Fk, self.Lk, self.Qk)
-
-        ax = np.round(data.linear_acceleration.x,1)
-        ay = np.round(data.linear_acceleration.y,1)
-        az = np.round(data.linear_acceleration.z,1)
-        az = 0
-        # luego se actualizan los valores
-        imu_accel = np.array([[ax, ay, az]]).T 
-        self.speed_filter.uk = imu_accel
-
-        
 
 
-    def gps_callback(self, data):
+    def measurement_update(self, x_gps, y_gps):
         # En esta funcion se haran las correcciones
-        
+        self.R = I * sensor_var
+
+
         vx = self.speed_filter.xk[0,0]
         vy = self.speed_filter.xk[1,0]
         vz = self.speed_filter.xk[2,0]
@@ -65,22 +66,8 @@ class PositionSpeedFilter:
         self.Hk = np.array([[vx*va, vy*va, vz*va]])
 
         # Primero hace la correción con lo que ya tenemos
-        self.speed_filter.correction_step(h, self.Hk,self.Mk, self.Rk)
+        self.filter.correction_step(h, self.Hk,self.Mk, self.Rk)
 
-        # Ahora si actualizamos
-        gps_vel = np.array([[data.data]])*0.27778    # de km/h a m/s
-        self.speed_filter.yk = gps_vel
+        return x_est, y_est
 
 
-    def run(self):
-        # Bucle principal
-        while not rospy.is_shutdown():
-        
-            # Publica la velocidad filtrada
-            speed_filtered = np.linalg.norm(self.speed_filter.xk)
-            speed_filtered = np.round(speed_filtered,1)
-            rospy.loginfo(speed_filtered)
-            self.vel_filtrada_pub.publish(speed_filtered)
-
-            # Espera para mantener la frecuencia de muestreo
-            rospy.sleep(self.dta)
