@@ -24,8 +24,6 @@ class PositionSpeedFilter:
         self.H[:2,:2] = np.eye(2)
         I = np.eye(2)
         self.M = I
-        
-
 
         # Inicializando filtro de kalman
         self.filter = ExtendedFilter(xk, uk, Pk)
@@ -48,7 +46,7 @@ class PositionSpeedFilter:
         self.filter.prediction_step(f,self.F,self.L,self.Q)
 
         
-
+        # Retorna las posiciones x e y
         return self.filter.xk[0][0], self.filter.xk[1][0]
 
         
@@ -66,8 +64,7 @@ class PositionSpeedFilter:
 
         self.filter.correction_step(yk=y_k,h=p_check, Hk=self.H,Mk=self.M, R=self.R)
 
-        # print(self.filter.xk)
-
+        # Retorna las posiciones x e y del filtro
         return self.filter.xk[0][0], self.filter.xk[1][0]
 
 

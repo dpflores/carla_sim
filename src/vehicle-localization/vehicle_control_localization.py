@@ -42,9 +42,9 @@ from carla.tcp        import TCPConnectionError
 from carla.controller import utils
 
 
-GPS_VAR = 0.3
-IMU_VAR = 0.7
-ODOM_VAR = 0.1
+GPS_VAR = 2
+IMU_VAR = 0.1
+ODOM_VAR = 0.05
 """
 Configurable params
 """
@@ -261,7 +261,7 @@ def get_current_accel(measurement_data):
     return x_accel, y_accel, z_accel
 
 def get_odom_pos(x, y, v, yaw, dt):
-    x_odom = x + v*np.cos(yaw)*dt
+    x_odom = x + v*np.cos(yaw)*dt 
     y_odom = y + v*np.sin(yaw)*dt
     return x_odom, y_odom
 
@@ -595,7 +595,6 @@ def exec_waypoint_nav_demo(args):
             x_odom, y_odom = get_odom_pos(x_odom, y_odom, speed_odom, yaw_imu, SIMULATION_TIME_STEP)
 
             # x_est, y_est = x_odom, y_odom # para probar unicamente odometría
-
 
             # ODOMETRY Kalman update
             x_est, y_est = filter.measurement_update(x_odom, y_odom, ODOM_VAR)
