@@ -42,8 +42,8 @@ from carla.tcp        import TCPConnectionError
 from carla.controller import utils
 
 
-GPS_VAR = 0.2
-IMU_VAR = 0.3
+GPS_VAR = 0.3
+IMU_VAR = 0.7
 ODOM_VAR = 0.1
 """
 Configurable params
@@ -85,7 +85,7 @@ PLOT_BOT           = 0.1
 PLOT_WIDTH         = 0.8
 PLOT_HEIGHT        = 0.8
 
-WAYPOINTS_FILENAME = 'waypoints/racetrack_waypoints_test.txt'  # waypoint file to load
+WAYPOINTS_FILENAME = 'waypoints/racetrack_waypoints.txt'  # waypoint file to load
 # WAYPOINTS_FILENAME = 'waypoints/waypoints.txt'  # waypoint file to load
 DIST_THRESHOLD_TO_LAST_WAYPOINT = 2  # some distance from last position before
                                        # simulation ends
@@ -234,31 +234,37 @@ def write_trajectory_file(x_list, y_list, v_list, t_list):
             trajectory_file.write('%3.3f, %3.3f, %2.3f, %6.3f\n' %\
                                   (x_list[i], y_list[i], v_list[i], t_list[i]))
 
-def write_data_file(t_list, x_acc_list, y_acc_list, z_acc_list, v_list, steer_list, roll_list, pitch_list, yaw_list,x_gps, y_gps, x_list, y_list, z_list):
+def write_data_file(t_list, x_acc_list, y_acc_list, z_acc_list, v_list, steer_list, roll_list, pitch_list, yaw_list,x_gps, y_gps, x_list, y_list, z_list,x_est_list,y_est_list):
     create_controller_output_dir(LOCALIZATION_OUTPUT_FOLDER)
     file_name = os.path.join(LOCALIZATION_OUTPUT_FOLDER, 'data.txt')
 
-    headers = 'time, x_accel, y_accel, z_accel, speed, steer, roll, pitch, yaw, x_gps, y_gps, x_real, y_real, z_real\n'
+    headers = 'time, x_accel, y_accel, z_accel, speed, steer, roll, pitch, yaw, x_gps, y_gps, x_real, y_real, z_real, x_est, y_est\n'
     with open(file_name, 'w') as data_file:
         data_file.write(headers)
         for i in range(len(t_list)):
-            data_file.write('%3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f\n' %\
+            data_file.write('%3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f\n' %\
                     (t_list[i], x_acc_list[i], y_acc_list[i], z_acc_list[i], v_list[i], steer_list[i],
-                    roll_list[i], pitch_list[i], yaw_list[i], x_gps[i], y_gps[i], x_list[i], y_list[i], z_list[i]))
+                    roll_list[i], pitch_list[i], yaw_list[i], x_gps[i], y_gps[i], x_list[i], y_list[i], z_list[i], x_est_list[i], y_est_list[i]))
 
-def add_noise(x, y, roll, pitch, yaw, speed):
+def add_noise(x, y, yaw, speed):
     # FALTA AÑADIR NOISE
-    x = x + np.random.normal(0,2)
-    y = y + np.random.normal(0,2)
-    yaw = yaw + np.random.normal(0,0.1)
-    speed = speed + np.random.normal(0,0.5)
-    return x, y, yaw, speed
+    x_gps = x + np.random.normal(0,2)
+    y_gps = y + np.random.normal(0,2)
+    yaw_imu = yaw + np.random.normal(0,0.1)
+    speed_odom = speed + np.random.normal(0,0.5)
+    return x_gps, y_gps, yaw_imu, speed_odom
 
 def get_current_accel(measurement_data):
     x_accel = measurement_data.player_measurements.acceleration.x + np.random.normal(0,0.1)
     y_accel = measurement_data.player_measurements.acceleration.y + np.random.normal(0,0.1)
     z_accel = measurement_data.player_measurements.acceleration.z + np.random.normal(0,0.1)
     return x_accel, y_accel, z_accel
+
+def get_odom_pos(x, y, v, yaw, dt):
+    x_odom = x + v*np.cos(yaw)*dt
+    y_odom = y + v*np.sin(yaw)*dt
+    return x_odom, y_odom
+
 
 
 def exec_waypoint_nav_demo(args):
@@ -456,10 +462,16 @@ def exec_waypoint_nav_demo(args):
         x_est_history = [start_x]
         y_est_history = [start_y]
 
+        # Iniciamos para estimaciones 
+        x_est = start_x
+        y_est = start_y
+        x_odom = start_x
+        y_odom = start_y
+
         steer = 0
 
         # START FILTER
-        filter = estimator.PositionSpeedFilter(dt=0.023, x_init=start_x, y_init=start_y, vx_init=0, vy_init=0, var_model=IMU_VAR)
+        filter = estimator.PositionSpeedFilter(dt=SIMULATION_TIME_STEP, x_init=start_x, y_init=start_y, vx_init=0, vy_init=0, var_model=IMU_VAR)
 
         #############################################
         # Vehicle Trajectory Live Plotting Setup
@@ -573,16 +585,29 @@ def exec_waypoint_nav_demo(args):
 
             x_accel, y_accel, z_accel = get_current_accel(measurement_data)
 
+
             ## HACER ACÁ LA LOCALIZACIÓN
 
+            # Modelo o solo IMU
             x_est, y_est = filter.prediction_update(x_accel, y_accel)
 
-            if count == 45:
+            
+            x_odom, y_odom = get_odom_pos(x_odom, y_odom, speed_odom, yaw_imu, SIMULATION_TIME_STEP)
+
+            # x_est, y_est = x_odom, y_odom # para probar unicamente odometría
+
+
+            # ODOMETRY Kalman update
+            x_est, y_est = filter.measurement_update(x_odom, y_odom, ODOM_VAR)
+
+            # GPS Kalman update
+            if count == 30:
                 x_est, y_est = filter.measurement_update(x_gps, y_gps, GPS_VAR)
+                # x_est, y_est = x_gps, y_gps # para probar unicamente GPS
                 count = 0
             count += 1
 
-            print(x_est, y_est)
+            # print(y_est)
             current_timestamp = float(measurement_data.game_timestamp) / 1000.0
 
             # Wait for some initial time before starting the demo
@@ -606,8 +631,8 @@ def exec_waypoint_nav_demo(args):
             z_accel_history.append(z_accel)
             x_gps_history.append(x_gps)
             y_gps_history.append(y_gps)
-            roll_imu_history.append(roll_imu)
-            pitch_imu_history.append(pitch_imu)
+            roll_imu_history.append(0)
+            pitch_imu_history.append(0)     #por ahora asi
             yaw_imu_history.append(yaw_imu)
             speed_odom_history.append(speed_odom)
             steer_history.append(steer)
@@ -697,8 +722,12 @@ def exec_waypoint_nav_demo(args):
                 pass
             else:
                 # Update live plotter with new feedback
-                trajectory_fig.roll("trajectory", current_x, current_y)
-                trajectory_fig.roll("car", current_x, current_y)
+                # trajectory_fig.roll("trajectory", current_x, current_y)
+                # trajectory_fig.roll("car", current_x, current_y)
+
+                # FOR LOCALIZATION
+                trajectory_fig.roll("trajectory", x_est, y_est)
+                trajectory_fig.roll("car", x_est, y_est)
                 # When plotting lookahead path, only plot a number of points
                 # (INTERP_MAX_POINTS_PLOT amount of points). This is meant
                 # to decrease load when live plotting
@@ -763,7 +792,7 @@ def exec_waypoint_nav_demo(args):
         write_trajectory_file(x_history, y_history, speed_history, time_history)
         write_data_file(time_history, x_accel_history, y_accel_history, z_accel_history, speed_odom_history, 
                         steer_history, roll_imu_history, pitch_imu_history, yaw_imu_history,
-                        x_gps_history, y_gps_history, x_history, y_history, z_history)
+                        x_gps_history, y_gps_history, x_history, y_history, z_history, x_est_history, y_est_history)
 
 def main():
     """Main function.
