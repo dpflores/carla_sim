@@ -171,28 +171,14 @@ def get_current_pose(measurement):
     """
     x   = measurement.player_measurements.transform.location.x
     y   = measurement.player_measurements.transform.location.y
+    z   = measurement.player_measurements.transform.location.z
+
+    roll = math.radians(measurement.player_measurements.transform.rotation.roll)
+    pitch = math.radians(measurement.player_measurements.transform.rotation.pitch)
     yaw = math.radians(measurement.player_measurements.transform.rotation.yaw)
 
-    return (x, y, yaw)
+    return (x, y, z, roll, pitch, yaw)
 
-def get_start_pos(scene):
-    """Obtains player start x,y, yaw pose from the scene
-    
-    Obtains the player x,y, and yaw pose from the scene.
-
-    Args:
-        scene: The CARLA scene object
-
-    Returns: (x, y, yaw)
-        x: X position in meters
-        y: Y position in meters
-        yaw: Yaw position in radians
-    """
-    x = scene.player_start_spots[0].location.x
-    y = scene.player_start_spots[0].location.y
-    yaw = math.radians(scene.player_start_spots[0].rotation.yaw)
-
-    return (x, y, yaw)
 
 def send_control_command(client, throttle, steer, brake, 
                          hand_brake=False, reverse=False):
@@ -242,20 +228,21 @@ def write_trajectory_file(x_list, y_list, v_list, t_list):
             trajectory_file.write('%3.3f, %3.3f, %2.3f, %6.3f\n' %\
                                   (x_list[i], y_list[i], v_list[i], t_list[i]))
 
-def write_data_file(t_list, x_acc_list, y_acc_list, z_acc_list, v_list, steer_list, yaw_list):
+def write_data_file(t_list, x_acc_list, y_acc_list, z_acc_list, v_list, steer_list, roll_list, pitch_list, yaw_list,x_gps, y_gps, x_list, y_list, z_list):
     create_controller_output_dir(LOCALIZATION_OUTPUT_FOLDER)
     file_name = os.path.join(LOCALIZATION_OUTPUT_FOLDER, 'data.txt')
 
-    headers = 'time, x_accel, y_accel, z_accel, speed, steer, yaw\n'
+    headers = 'time, x_accel, y_accel, z_accel, speed, steer, roll, pitch, yaw, x_gps, y_gps, x_real, y_real, z_real\n'
     with open(file_name, 'w') as data_file:
         data_file.write(headers)
         for i in range(len(t_list)):
-            data_file.write('%3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f\n' %\
-                                  (t_list[i], x_acc_list[i], y_acc_list[i], z_acc_list[i], v_list[i], steer_list[i], yaw_list[i]))
+            data_file.write('%3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f\n' %\
+                    (t_list[i], x_acc_list[i], y_acc_list[i], z_acc_list[i], v_list[i], steer_list[i],
+                    roll_list[i], pitch_list[i], yaw_list[i], x_gps[i], y_gps[i], x_list[i], y_list[i], z_list[i]))
 
-def add_noise(x, y, yaw, speed):
+def add_noise(x, y, roll, pitch, yaw, speed):
     # FALTA AÑADIR NOISE
-    return x, y, yaw, speed
+    return x, y, roll, pitch, yaw, speed
 
 def get_current_accel(measurement_data):
     x_accel = measurement_data.player_measurements.acceleration.x
@@ -431,10 +418,11 @@ def exec_waypoint_nav_demo(args):
         #############################################
         # Store pose history starting from the start position
         measurement_data, sensor_data = client.read_data()
-        start_x, start_y, start_yaw = get_current_pose(measurement_data)
+        start_x, start_y, start_z, start_roll, start_pitch, start_yaw = get_current_pose(measurement_data)
         send_control_command(client, throttle=0.0, steer=0, brake=1.0)
         x_history     = [start_x]
         y_history     = [start_y]
+        z_history     = [start_z]
         yaw_history   = [start_yaw]
         time_history  = [0]
         speed_history = [0]
@@ -445,6 +433,8 @@ def exec_waypoint_nav_demo(args):
         z_accel_history = [0]
         x_gps_history = [start_x]
         y_gps_history = [start_y]
+        roll_imu_history  = [start_roll]
+        pitch_imu_history = [start_pitch]
         yaw_imu_history = [start_yaw]
         speed_odom_history = [0]
         steer_history = [0]
@@ -553,11 +543,11 @@ def exec_waypoint_nav_demo(args):
             measurement_data, sensor_data = client.read_data()
 
             # Update pose, timestamp
-            current_x, current_y, current_yaw = get_current_pose(measurement_data)
+            current_x, current_y, current_z, current_roll, current_pitch, current_yaw = get_current_pose(measurement_data)
             current_speed = measurement_data.player_measurements.forward_speed
 
             ### AÑADIDO PARA LOCALIZACION (VALORES ACTUALES)
-            x_gps, y_gps, yaw_imu, speed_odom = add_noise(current_x, current_y, current_yaw, current_speed)
+            x_gps, y_gps,roll_imu, pitch_imu, yaw_imu, speed_odom = add_noise(current_x, current_y, current_roll, current_pitch, current_yaw, current_speed)
             x_accel, y_accel, z_accel = get_current_accel(measurement_data)
             ### FALTA EL STEERING
 
@@ -573,6 +563,7 @@ def exec_waypoint_nav_demo(args):
             # Store history
             x_history.append(current_x)
             y_history.append(current_y)
+            z_history.append(current_z)
             yaw_history.append(current_yaw)
             speed_history.append(current_speed)
             time_history.append(current_timestamp) 
@@ -583,6 +574,8 @@ def exec_waypoint_nav_demo(args):
             z_accel_history.append(z_accel)
             x_gps_history.append(x_gps)
             y_gps_history.append(y_gps)
+            roll_imu_history.append(roll_imu)
+            pitch_imu_history.append(pitch_imu)
             yaw_imu_history.append(yaw_imu)
             speed_odom_history.append(speed_odom)
             steer_history.append(steer)
@@ -735,7 +728,9 @@ def exec_waypoint_nav_demo(args):
         store_trajectory_plot(brake_fig.fig, 'brake_output.png')
         store_trajectory_plot(steer_fig.fig, 'steer_output.png')
         write_trajectory_file(x_history, y_history, speed_history, time_history)
-        write_data_file(time_history, x_accel_history, y_accel_history, z_accel_history, speed_odom_history, steer_history, yaw_imu_history)
+        write_data_file(time_history, x_accel_history, y_accel_history, z_accel_history, speed_odom_history, 
+                        steer_history, roll_imu_history, pitch_imu_history, yaw_imu_history,
+                        x_gps_history, y_gps_history, x_history, y_history, z_history)
 
 def main():
     """Main function.
