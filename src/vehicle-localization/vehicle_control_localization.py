@@ -27,6 +27,8 @@ import matplotlib.pyplot as plt
 import controller2d
 import configparser 
 
+import estimator
+
 # Script level imports
 # Adding the parent path to import the modules
 # Try not to overwrite any important path
@@ -39,6 +41,10 @@ from carla.settings   import CarlaSettings
 from carla.tcp        import TCPConnectionError
 from carla.controller import utils
 
+
+GPS_VAR = 0.2
+IMU_VAR = 0.3
+ODOM_VAR = 0.1
 """
 Configurable params
 """
@@ -79,7 +85,7 @@ PLOT_BOT           = 0.1
 PLOT_WIDTH         = 0.8
 PLOT_HEIGHT        = 0.8
 
-WAYPOINTS_FILENAME = 'waypoints/racetrack_waypoints.txt'  # waypoint file to load
+WAYPOINTS_FILENAME = 'waypoints/racetrack_waypoints_test.txt'  # waypoint file to load
 # WAYPOINTS_FILENAME = 'waypoints/waypoints.txt'  # waypoint file to load
 DIST_THRESHOLD_TO_LAST_WAYPOINT = 2  # some distance from last position before
                                        # simulation ends
@@ -242,19 +248,24 @@ def write_data_file(t_list, x_acc_list, y_acc_list, z_acc_list, v_list, steer_li
 
 def add_noise(x, y, roll, pitch, yaw, speed):
     # FALTA AÑADIR NOISE
-    return x, y, roll, pitch, yaw, speed
+    x = x + np.random.normal(0,2)
+    y = y + np.random.normal(0,2)
+    yaw = yaw + np.random.normal(0,0.1)
+    speed = speed + np.random.normal(0,0.5)
+    return x, y, yaw, speed
 
 def get_current_accel(measurement_data):
-    x_accel = measurement_data.player_measurements.acceleration.x
-    y_accel = measurement_data.player_measurements.acceleration.y
-    z_accel = measurement_data.player_measurements.acceleration.z
+    x_accel = measurement_data.player_measurements.acceleration.x + np.random.normal(0,0.1)
+    y_accel = measurement_data.player_measurements.acceleration.y + np.random.normal(0,0.1)
+    z_accel = measurement_data.player_measurements.acceleration.z + np.random.normal(0,0.1)
     return x_accel, y_accel, z_accel
 
 
 def exec_waypoint_nav_demo(args):
     """ Executes waypoint navigation demo.
     """
-
+    
+    
     with make_carla_client(args.host, args.port) as client:
         print('Carla client connected.')
 
@@ -374,6 +385,9 @@ def exec_waypoint_nav_demo(args):
         # and apply it to the simulator
         controller = controller2d.Controller2D(waypoints)
 
+
+        
+
         #############################################
         # Determine simulation average timestep (and total frames)
         #############################################
@@ -439,7 +453,13 @@ def exec_waypoint_nav_demo(args):
         speed_odom_history = [0]
         steer_history = [0]
 
+        x_est_history = [start_x]
+        y_est_history = [start_y]
+
         steer = 0
+
+        # START FILTER
+        filter = estimator.PositionSpeedFilter(dt=0.023, x_init=start_x, y_init=start_y, vx_init=0, vy_init=0, var_model=IMU_VAR)
 
         #############################################
         # Vehicle Trajectory Live Plotting Setup
@@ -538,6 +558,8 @@ def exec_waypoint_nav_demo(args):
         closest_index    = 0  # Index of waypoint that is currently closest to
                               # the car (assumed to be the first index)
         closest_distance = 0  # Closest distance of closest waypoint to car
+
+        count = 0
         for frame in range(TOTAL_EPISODE_FRAMES):
             # Gather current data from the CARLA server
             measurement_data, sensor_data = client.read_data()
@@ -547,10 +569,20 @@ def exec_waypoint_nav_demo(args):
             current_speed = measurement_data.player_measurements.forward_speed
 
             ### AÑADIDO PARA LOCALIZACION (VALORES ACTUALES)
-            x_gps, y_gps,roll_imu, pitch_imu, yaw_imu, speed_odom = add_noise(current_x, current_y, current_roll, current_pitch, current_yaw, current_speed)
-            x_accel, y_accel, z_accel = get_current_accel(measurement_data)
-            ### FALTA EL STEERING
+            x_gps, y_gps, yaw_imu, speed_odom = add_noise(current_x, current_y, current_yaw, current_speed)
 
+            x_accel, y_accel, z_accel = get_current_accel(measurement_data)
+
+            ## HACER ACÁ LA LOCALIZACIÓN
+
+            x_est, y_est = filter.prediction_update(x_accel, y_accel)
+
+            if count == 45:
+                x_est, y_est = filter.measurement_update(x_gps, y_gps, GPS_VAR)
+                count = 0
+            count += 1
+
+            print(x_est, y_est)
             current_timestamp = float(measurement_data.game_timestamp) / 1000.0
 
             # Wait for some initial time before starting the demo
@@ -579,6 +611,8 @@ def exec_waypoint_nav_demo(args):
             yaw_imu_history.append(yaw_imu)
             speed_odom_history.append(speed_odom)
             steer_history.append(steer)
+            x_est_history.append(x_est)
+            y_est_history.append(y_est)
 
             ###
             # Controller update (this uses the controller2d.py implementation)
@@ -656,8 +690,7 @@ def exec_waypoint_nav_demo(args):
             cmd_throttle, cmd_steer, cmd_brake = controller.get_commands()
             steer = cmd_steer
 
-            ## HACER ACÁ LA LOCALIZACIÓN
-
+            
 
             # Skip the first frame (so the controller has proper outputs)
             if skip_first_frame and frame == 0:

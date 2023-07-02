@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 import os
 
 POSITION_OUTPUT_FILE = "controller_output/trajectory.txt"
-
 fig = plt.figure()
 ax1 = fig.add_subplot(1,1,1)
 
