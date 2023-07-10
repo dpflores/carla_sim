@@ -1,33 +1,129 @@
 import matplotlib.pyplot as plt
-import os
+import numpy as np
 
-POSITION_OUTPUT_FILE = "controller_output/trajectory.txt"
-fig = plt.figure()
-ax1 = fig.add_subplot(1,1,1)
+# Cargar los datos del archivo
+data = np.genfromtxt('localization_output/data.txt', delimiter=',', skip_header=1)
+
+# Extraer las columnas relevantes
+time = data[:, 0]
+x_accel = data[:, 1]
+y_accel = data[:, 2]
+z_accel = data[:, 3]
+speed = data[:, 4]
+steer = data[:, 5]
+roll = data[:, 6]
+pitch = data[:, 7]
+yaw = data[:, 8]
+x_gps = data[:, 9] 
+y_gps = data[:, 10] 
+x_odom = data[:, 11]
+y_odom = data[:,12]
+x_real = data[:, 13]
+y_real = data[:, 14]
+z_real = data[:, 15]
+x_est = data[:, 16]
+y_est = data[:, 17]
+
+
+plt.rcParams.update({
+            "text.usetex": True,
+            "font.family": "DejaVu Sans"
+        })
 
 
 
-graph_data = open(POSITION_OUTPUT_FILE,'r').read()
-lines = graph_data.split('\n')
+def plot_trajectory():
+    # Crear la gráfica
+    plt.plot(x_real, y_real, color='green', label=r"Trayectoria real", zorder=1)
+    plt.plot(x_est, y_est, color='orange', label=r"Trayectoria estimada", zorder=1)
 
-xs = []
-ys = []
 
-error_s = []
-for line in lines:
-    if len(line) > 1:
-        x, y, v, t= line.split(',')
-        
-        xs.append(float(x))
-        ys.append(float(y))
+    # Marcadores de inicio y fin
+    plt.scatter(x_real[0], y_real[0], color='red', s=100, label='Inicio', zorder=2)
+    plt.scatter(x_real[-1], y_real[-1], color='blue', s=100, label='Fin', zorder=2)
+
+
+    # Configurar el aspecto de la gráfica
+    plt.xlabel(r"posici\'on x (m)",fontsize=12)
+    plt.ylabel(r"posici\'on y (m)",fontsize=12)
+
+
+    # plt.title('Ruta Real y Estimada')
+
+    # Mostrar la leyenda
+    plt.legend()
+    # Mostrar la gráfica
+    plt.show()
+
+
+def plot_trajectory_full():
+    # Crear la gráfica
+
     
+    # plt.plot(x_est, y_est, color='orange', label='Trayectoria estimada', zorder=1)
+    plt.plot(x_odom, y_odom, color='red', label=r'Trayectoria por odometr\'ia', zorder=1)
+    plt.plot(x_gps, y_gps, color='blue', label='Trayectoria por GPS', zorder=1)
+    plt.plot(x_real, y_real, color='green', label='Trayectoria real', zorder=1, linewidth="2")
+
+
+    # Marcadores de inicio y fin
+    plt.scatter(x_real[0], y_real[0], color='red', s=100, label='Inicio', zorder=2)
+    plt.scatter(x_real[-1], y_real[-1], color='blue', s=100, label='Fin', zorder=2)
+
+
+    # Configurar el aspecto de la gráfica
+    plt.xlabel(r"posici\'on x (m)",fontsize=12)
+    plt.ylabel(r"posici\'on y (m)",fontsize=12)
+
+
+    # plt.title('Ruta Real y Estimada')
+
+    # Mostrar la leyenda
+    plt.legend()
+    # Mostrar la gráfica
+    plt.show()
 
 
 
-ax1.plot(xs, ys, 'b-')
-ax1.set_xlabel("x position (m)")
-ax1.set_ylabel("y position (m)")
+def plot_error():
+    # Calcular el error de la trayectoria
+    distances1 = np.sqrt((x_real - x_est) ** 2 + (y_real - y_est) ** 2)
+    distances2 = np.sqrt((x_real - x_gps) ** 2 + (y_real - y_gps) ** 2)
+    distances3 = np.sqrt((x_real - x_odom) ** 2 + (y_real - y_odom) ** 2)
+    
+   # Calcular los promedios de error para cada conjunto de distancias
+    avg_error1 = np.mean(distances1)
+    avg_error2 = np.mean(distances2)
+    avg_error3 = np.mean(distances3)
+
+    print(avg_error1, avg_error2, avg_error3)
+
+    # Crear la figura y los subgráficos
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True)
+
+    # Plotear el primer conjunto de distancias
+    ax1.set_title('Error de filtro de Kalman')
+    ax1.plot(time, distances1, color='blue')
+    ax1.set_ylabel(r"Error (m)")
+
+    # Plotear el segundo conjunto de distancias
+    ax2.set_title('Error de GPS')
+    ax2.plot(time, distances2, color='blue')
+    ax2.set_ylabel(r"Error (m)")
+
+    # Plotear el tercer conjunto de distancias
+    ax3.set_title(r'Error de Odometr\'ia')
+    ax3.plot(time, distances3, color='blue')
+    ax3.set_xlabel('Tiempo (s)')
+    ax3.set_ylabel(r"Error (m)")
+
+    # Ajustar el espaciado entre subgráficos
+    plt.tight_layout()
+
+    # Mostrar la gráfica
+    plt.show()
 
 
+plot_error()
 
-plt.show()
+plot_trajectory_full()
