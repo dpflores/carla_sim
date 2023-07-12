@@ -23,6 +23,8 @@ y_real = data[:, 14]
 z_real = data[:, 15]
 x_est = data[:, 16]
 y_est = data[:, 17]
+# x_imu = data[:, 18]
+# y_imu = data[:, 19]
 
 
 plt.rcParams.update({
@@ -44,8 +46,8 @@ def plot_trajectory():
 
 
     # Configurar el aspecto de la gráfica
-    plt.xlabel(r"posici\'on x (m)",fontsize=12)
-    plt.ylabel(r"posici\'on y (m)",fontsize=12)
+    plt.xlabel(r"Posici\'on x (m)",fontsize=12)
+    plt.ylabel(r"Posici\'on y (m)",fontsize=12)
 
 
     # plt.title('Ruta Real y Estimada')
@@ -72,8 +74,8 @@ def plot_trajectory_full():
 
 
     # Configurar el aspecto de la gráfica
-    plt.xlabel(r"posici\'on x (m)",fontsize=12)
-    plt.ylabel(r"posici\'on y (m)",fontsize=12)
+    plt.xlabel(r"Posici\'on x (m)",fontsize=12)
+    plt.ylabel(r"Posici\'on y (m)",fontsize=12)
 
 
     # plt.title('Ruta Real y Estimada')
@@ -83,9 +85,49 @@ def plot_trajectory_full():
     # Mostrar la gráfica
     plt.show()
 
+def plot_error1():
+    # Calcular el error de la trayectoria
+    distances1 = np.sqrt((x_real - x_est) ** 2 + (y_real - y_est) ** 2)
+    distances2 = np.sqrt((x_real - x_gps) ** 2 + (y_real - y_gps) ** 2)
+    distances3 = np.sqrt((x_real - x_imu) ** 2 + (y_real - y_imu) ** 2)
+    
+   # Calcular los promedios de error para cada conjunto de distancias
+    avg_error1 = np.mean(distances1)
+    avg_error2 = np.mean(distances2)
+    avg_error3 = np.mean(distances3)
 
+    print(avg_error1, avg_error2, avg_error3)
 
-def plot_error():
+    # Crear la figura y los subgráficos
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True)
+
+    # Plotear el primer conjunto de distancias
+    ax1.set_title('Error de filtro de Kalman')
+    # ax1.set_title('Error de modelo IMU')
+    ax1.plot(time, distances1, color='blue')
+    ax1.set_ylabel(r"Error (m)")
+    ax1.grid()
+
+    # Plotear el segundo conjunto de distancias
+    ax2.set_title('Error de GPS')
+    ax2.plot(time, distances2, color='blue')
+    ax2.set_ylabel(r"Error (m)")
+    ax2.grid()
+
+    # Plotear el tercer conjunto de distancias
+    ax3.set_title(r'Error de modelo IMU')
+    ax3.plot(time, distances3, color='blue')
+    ax3.set_xlabel('Tiempo (s)')
+    ax3.set_ylabel(r"Error (m)")
+    ax3.grid()
+
+    # Ajustar el espaciado entre subgráficos
+    plt.tight_layout()
+
+    # Mostrar la gráfica
+    plt.show()
+
+def plot_error2():
     # Calcular el error de la trayectoria
     distances1 = np.sqrt((x_real - x_est) ** 2 + (y_real - y_est) ** 2)
     distances2 = np.sqrt((x_real - x_gps) ** 2 + (y_real - y_gps) ** 2)
@@ -103,19 +145,23 @@ def plot_error():
 
     # Plotear el primer conjunto de distancias
     ax1.set_title('Error de filtro de Kalman')
+    # ax1.set_title('Error de modelo IMU')
     ax1.plot(time, distances1, color='blue')
     ax1.set_ylabel(r"Error (m)")
+    ax1.grid()
 
     # Plotear el segundo conjunto de distancias
     ax2.set_title('Error de GPS')
     ax2.plot(time, distances2, color='blue')
     ax2.set_ylabel(r"Error (m)")
+    ax2.grid()
 
     # Plotear el tercer conjunto de distancias
     ax3.set_title(r'Error de Odometr\'ia')
     ax3.plot(time, distances3, color='blue')
     ax3.set_xlabel('Tiempo (s)')
     ax3.set_ylabel(r"Error (m)")
+    ax3.grid()
 
     # Ajustar el espaciado entre subgráficos
     plt.tight_layout()
@@ -164,9 +210,9 @@ def plot_accels():
     # Mostrar la gráfica
     plt.show()
 
-
-# plot_error()
+plot_trajectory()
+plot_error2()
 
 # plot_trajectory_full()
 
-plot_accels()
+# plot_accels()

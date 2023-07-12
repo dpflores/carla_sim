@@ -42,9 +42,9 @@ from carla.tcp        import TCPConnectionError
 from carla.controller import utils
 
 
-GPS_VAR = 2
-IMU_VAR = 0.1
-ODOM_VAR = 0.05
+GPS_VAR = 0.1
+IMU_VAR = 0.5
+ODOM_VAR = 2
 """
 Configurable params
 """
@@ -234,17 +234,17 @@ def write_trajectory_file(x_list, y_list, v_list, t_list):
             trajectory_file.write('%3.3f, %3.3f, %2.3f, %6.3f\n' %\
                                   (x_list[i], y_list[i], v_list[i], t_list[i]))
 
-def write_data_file(t_list, x_acc_list, y_acc_list, z_acc_list, v_list, steer_list, roll_list, pitch_list, yaw_list,x_gps, y_gps, x_list, y_list, z_list,x_est_list,y_est_list):
+def write_data_file(t_list, x_acc_list, y_acc_list, z_acc_list, v_list, steer_list, roll_list, pitch_list, yaw_list,x_gps, y_gps,x_odom,y_odom, x_list, y_list, z_list,x_est_list,y_est_list,x_imu_list,y_imu_list):
     create_controller_output_dir(LOCALIZATION_OUTPUT_FOLDER)
     file_name = os.path.join(LOCALIZATION_OUTPUT_FOLDER, 'data.txt')
 
-    headers = 'time, x_accel, y_accel, z_accel, speed, steer, roll, pitch, yaw, x_gps, y_gps, x_real, y_real, z_real, x_est, y_est\n'
+    headers = 'time, x_accel, y_accel, z_accel, speed, steer, roll, pitch, yaw, x_gps, y_gps, x_odom, y_odom, x_real, y_real, z_real, x_est, y_est, x_imu, y_imu\n'
     with open(file_name, 'w') as data_file:
         data_file.write(headers)
         for i in range(len(t_list)):
-            data_file.write('%3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f\n' %\
+            data_file.write('%3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f\n' %\
                     (t_list[i], x_acc_list[i], y_acc_list[i], z_acc_list[i], v_list[i], steer_list[i],
-                    roll_list[i], pitch_list[i], yaw_list[i], x_gps[i], y_gps[i], x_list[i], y_list[i], z_list[i], x_est_list[i], y_est_list[i]))
+                    roll_list[i], pitch_list[i], yaw_list[i], x_gps[i], y_gps[i], x_odom[i], y_odom[i], x_list[i], y_list[i], z_list[i], x_est_list[i], y_est_list[i], x_imu_list[i], y_imu_list[i]))
 
 def add_noise(x, y, yaw, speed):
     # FALTA AÑADIR NOISE
@@ -453,6 +453,8 @@ def exec_waypoint_nav_demo(args):
         z_accel_history = [0]
         x_gps_history = [start_x]
         y_gps_history = [start_y]
+        x_odom_history = [start_x]
+        y_odom_history = [start_y]
         roll_imu_history  = [start_roll]
         pitch_imu_history = [start_pitch]
         yaw_imu_history = [start_yaw]
@@ -462,11 +464,19 @@ def exec_waypoint_nav_demo(args):
         x_est_history = [start_x]
         y_est_history = [start_y]
 
+        x_imu_history = [start_x]
+        y_imu_history = [start_y]
+
         # Iniciamos para estimaciones 
         x_est = start_x
         y_est = start_y
         x_odom = start_x
         y_odom = start_y
+        x_gps = start_x
+        y_gps = start_y
+        x_imu = start_x
+        y_imu = start_y
+        
 
         steer = 0
 
@@ -576,6 +586,9 @@ def exec_waypoint_nav_demo(args):
         closest_index    = 0  # Index of waypoint that is currently closest to
                               # the car (assumed to be the first index)
         closest_distance = 0  # Closest distance of closest waypoint to car
+        
+        vx_imu = 0
+        vy_imu = 0
 
         count = 0
         for frame in range(TOTAL_EPISODE_FRAMES):
@@ -587,7 +600,7 @@ def exec_waypoint_nav_demo(args):
             current_speed = measurement_data.player_measurements.forward_speed
 
             ### AÑADIDO PARA LOCALIZACION (VALORES ACTUALES)
-            x_gps, y_gps, yaw_imu, speed_odom = add_noise(current_x, current_y, current_yaw, current_speed)
+            x_gps_noise, y_gps_noise, yaw_imu, speed_odom = add_noise(current_x, current_y, current_yaw, current_speed)
 
             x_accel, y_accel, z_accel = get_current_accel(measurement_data)
 
@@ -595,18 +608,24 @@ def exec_waypoint_nav_demo(args):
             ## HACER ACÁ LA LOCALIZACIÓN
 
             # Modelo o solo IMU
-            x_est, y_est = filter.prediction_update(x_accel, y_accel)
+            x_imu = x_imu + SIMULATION_TIME_STEP*vx_imu + (SIMULATION_TIME_STEP**2)*x_accel/2
+            y_imu = y_imu + SIMULATION_TIME_STEP*vy_imu + (SIMULATION_TIME_STEP**2)*y_accel/2
+            vx_imu = vx_imu*SIMULATION_TIME_STEP
+            vy_imu = vy_imu*SIMULATION_TIME_STEP
 
+            # Kalman estimation
+            x_est, y_est = filter.prediction_update(x_accel, y_accel)
             
             x_odom, y_odom = get_odom_pos(x_odom, y_odom, speed_odom, yaw_imu, SIMULATION_TIME_STEP)
-
             # x_est, y_est = x_odom, y_odom # para probar unicamente odometría
 
             # ODOMETRY Kalman update
             x_est, y_est = filter.measurement_update(x_odom, y_odom, ODOM_VAR)
 
-            # GPS Kalman update
+            # GPS Kalman update 
             if count == 30:
+                x_gps = x_gps_noise
+                y_gps = y_gps_noise
                 x_est, y_est = filter.measurement_update(x_gps, y_gps, GPS_VAR)
                 # x_est, y_est = x_gps, y_gps # para probar unicamente GPS
                 count = 0
@@ -636,6 +655,8 @@ def exec_waypoint_nav_demo(args):
             z_accel_history.append(z_accel)
             x_gps_history.append(x_gps)
             y_gps_history.append(y_gps)
+            x_odom_history.append(x_odom)
+            y_odom_history.append(y_odom)
             roll_imu_history.append(0)
             pitch_imu_history.append(0)     #por ahora asi
             yaw_imu_history.append(yaw_imu)
@@ -643,6 +664,8 @@ def exec_waypoint_nav_demo(args):
             steer_history.append(steer)
             x_est_history.append(x_est)
             y_est_history.append(y_est)
+            x_imu_history.append(x_imu)
+            y_imu_history.append(y_imu)
 
             ###
             # Controller update (this uses the controller2d.py implementation)
@@ -797,7 +820,7 @@ def exec_waypoint_nav_demo(args):
         write_trajectory_file(x_history, y_history, speed_history, time_history)
         write_data_file(time_history, x_accel_history, y_accel_history, z_accel_history, speed_odom_history, 
                         steer_history, roll_imu_history, pitch_imu_history, yaw_imu_history,
-                        x_gps_history, y_gps_history, x_history, y_history, z_history, x_est_history, y_est_history)
+                        x_gps_history, y_gps_history, x_odom_history, y_odom_history, x_history, y_history, z_history, x_est_history, y_est_history, x_imu_history, y_imu_history)
 
 def main():
     """Main function.
