@@ -126,10 +126,10 @@ class WaypointGenerator():
 
         ax2 = fig.add_subplot(2,1,2)
 
-        ax2.plot(self.x_v, self.v, 'b-',linewidth=2)
+        ax2.plot(self.x_v, self.v*3.6, 'b-',linewidth=2)
 
         ax2.set_xlabel("desplazamiento (m)",fontsize=12)
-        ax2.set_ylabel("velocidad (m/s)",fontsize=12)
+        ax2.set_ylabel("velocidad (km/h)",fontsize=12)
 
         plt.show()
 
