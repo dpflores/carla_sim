@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 import controller2d
 import configparser 
 
-import estimator
+import estimator2
 
 # Script level imports
 # Adding the parent path to import the modules
@@ -42,15 +42,15 @@ from carla.tcp        import TCPConnectionError
 from carla.controller import utils
 
 
-GPS_VAR = 0.1
-IMU_VAR = 0.5
-ODOM_VAR = 2
+GPS_VAR = 2
+IMU_VAR = 0.01
+ODOM_VAR = 1
 """
 Configurable params
 """
 ITER_FOR_SIM_TIMESTEP  = 10     # no. iterations to compute approx sim timestep
 WAIT_TIME_BEFORE_START = 1.00   # game seconds (time before controller start)
-TOTAL_RUN_TIME         = 200.00 # game seconds (total runtime before sim end)
+TOTAL_RUN_TIME         = 20.00 # game seconds (total runtime before sim end)
 TOTAL_FRAME_BUFFER     = 300    # number of frames to buffer after total runtime
 NUM_PEDESTRIANS        = 0      # total number of pedestrians to spawn
 NUM_VEHICLES           = 0      # total number of vehicles to spawn
@@ -234,17 +234,17 @@ def write_trajectory_file(x_list, y_list, v_list, t_list):
             trajectory_file.write('%3.3f, %3.3f, %2.3f, %6.3f\n' %\
                                   (x_list[i], y_list[i], v_list[i], t_list[i]))
 
-def write_data_file(t_list, x_acc_list, y_acc_list, z_acc_list, v_list, steer_list, roll_list, pitch_list, yaw_list,x_gps, y_gps,x_odom,y_odom, x_list, y_list, z_list,x_est_list,y_est_list,x_imu_list,y_imu_list):
+def write_data_file(t_list, x_acc_list, y_acc_list, z_acc_list, v_list, steer_list, roll_list, pitch_list, yaw_list,x_gps, y_gps,x_odom,y_odom, x_list, y_list, z_list,x_est_list,y_est_list):
     create_controller_output_dir(LOCALIZATION_OUTPUT_FOLDER)
     file_name = os.path.join(LOCALIZATION_OUTPUT_FOLDER, 'data.txt')
 
-    headers = 'time, x_accel, y_accel, z_accel, speed, steer, roll, pitch, yaw, x_gps, y_gps, x_odom, y_odom, x_real, y_real, z_real, x_est, y_est, x_imu, y_imu\n'
+    headers = 'time, x_accel, y_accel, z_accel, speed, steer, roll, pitch, yaw, x_gps, y_gps, x_odom, y_odom, x_real, y_real, z_real, x_est, y_est\n'
     with open(file_name, 'w') as data_file:
         data_file.write(headers)
         for i in range(len(t_list)):
-            data_file.write('%3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f\n' %\
+            data_file.write('%3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f, %3.6f\n' %\
                     (t_list[i], x_acc_list[i], y_acc_list[i], z_acc_list[i], v_list[i], steer_list[i],
-                    roll_list[i], pitch_list[i], yaw_list[i], x_gps[i], y_gps[i], x_odom[i], y_odom[i], x_list[i], y_list[i], z_list[i], x_est_list[i], y_est_list[i], x_imu_list[i], y_imu_list[i]))
+                    roll_list[i], pitch_list[i], yaw_list[i], x_gps[i], y_gps[i], x_odom[i], y_odom[i], x_list[i], y_list[i], z_list[i], x_est_list[i], y_est_list[i]))
 
 def add_noise(x, y, yaw, speed):
     # FALTA AÑADIR NOISE
@@ -464,9 +464,6 @@ def exec_waypoint_nav_demo(args):
         x_est_history = [start_x]
         y_est_history = [start_y]
 
-        x_imu_history = [start_x]
-        y_imu_history = [start_y]
-
         # Iniciamos para estimaciones 
         x_est = start_x
         y_est = start_y
@@ -474,14 +471,11 @@ def exec_waypoint_nav_demo(args):
         y_odom = start_y
         x_gps = start_x
         y_gps = start_y
-        x_imu = start_x
-        y_imu = start_y
-        
 
         steer = 0
 
         # START FILTER
-        filter = estimator.PositionSpeedFilter(dt=SIMULATION_TIME_STEP, x_init=start_x, y_init=start_y, vx_init=0, vy_init=0, var_model=IMU_VAR)
+        filter = estimator2.PositionFilter(dt=SIMULATION_TIME_STEP, x_init=start_x, y_init=start_y, var_speed=ODOM_VAR, var_yaw=IMU_VAR)
 
         #############################################
         # Vehicle Trajectory Live Plotting Setup
@@ -586,9 +580,6 @@ def exec_waypoint_nav_demo(args):
         closest_index    = 0  # Index of waypoint that is currently closest to
                               # the car (assumed to be the first index)
         closest_distance = 0  # Closest distance of closest waypoint to car
-        
-        vx_imu = 0
-        vy_imu = 0
 
         count = 0
         for frame in range(TOTAL_EPISODE_FRAMES):
@@ -607,22 +598,13 @@ def exec_waypoint_nav_demo(args):
 
             ## HACER ACÁ LA LOCALIZACIÓN
 
-            # Modelo o solo IMU
-            x_imu = x_imu + SIMULATION_TIME_STEP*vx_imu + (SIMULATION_TIME_STEP**2)*x_accel/2
-            y_imu = y_imu + SIMULATION_TIME_STEP*vy_imu + (SIMULATION_TIME_STEP**2)*y_accel/2
-            vx_imu = vx_imu*SIMULATION_TIME_STEP
-            vy_imu = vy_imu*SIMULATION_TIME_STEP
+            # Prediciton con el modelo de odometría
+            x_est, y_est = filter.prediction_update(speed_odom, yaw_imu)
 
-            # Kalman estimation
-            x_est, y_est = filter.prediction_update(x_accel, y_accel)
-            
             x_odom, y_odom = get_odom_pos(x_odom, y_odom, speed_odom, yaw_imu, SIMULATION_TIME_STEP)
-            # x_est, y_est = x_odom, y_odom # para probar unicamente odometría
 
-            # ODOMETRY Kalman update
-            x_est, y_est = filter.measurement_update(x_odom, y_odom, ODOM_VAR)
 
-            # GPS Kalman update 
+            # GPS Kalman update
             if count == 30:
                 x_gps = x_gps_noise
                 y_gps = y_gps_noise
@@ -664,8 +646,6 @@ def exec_waypoint_nav_demo(args):
             steer_history.append(steer)
             x_est_history.append(x_est)
             y_est_history.append(y_est)
-            x_imu_history.append(x_imu)
-            y_imu_history.append(y_imu)
 
             ###
             # Controller update (this uses the controller2d.py implementation)
@@ -741,6 +721,7 @@ def exec_waypoint_nav_demo(args):
                                      current_timestamp, frame)
             controller.update_controls()
             cmd_throttle, cmd_steer, cmd_brake = controller.get_commands()
+            cmd_throttle, cmd_steer, cmd_brake = 0, 0, 0
             steer = cmd_steer
 
             
@@ -820,7 +801,7 @@ def exec_waypoint_nav_demo(args):
         write_trajectory_file(x_history, y_history, speed_history, time_history)
         write_data_file(time_history, x_accel_history, y_accel_history, z_accel_history, speed_odom_history, 
                         steer_history, roll_imu_history, pitch_imu_history, yaw_imu_history,
-                        x_gps_history, y_gps_history, x_odom_history, y_odom_history, x_history, y_history, z_history, x_est_history, y_est_history, x_imu_history, y_imu_history)
+                        x_gps_history, y_gps_history, x_odom_history, y_odom_history, x_history, y_history, z_history, x_est_history, y_est_history)
 
 def main():
     """Main function.
