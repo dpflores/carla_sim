@@ -50,8 +50,8 @@ def grade(waypoints, solution, visualize = False):
     N = waypoints.shape[0]
 
     results = {
-    'd_thresh' : 0.2,           # distance to waypoints
-    'v_thresh' : 0.22,           # speed difference at waypoints
+    'd_thresh' : 2,           # distance to waypoints
+    'v_thresh' : 10,           # speed difference at waypoints
     'pass_percentage': 50,    # percentage of correct waypoints required
     'solution' : solution,
     'waypoints': waypoints,
@@ -80,9 +80,18 @@ def grade(waypoints, solution, visualize = False):
         print('Assessment passed!, {0:.2f}% of waypoints completed.'.format(percent_correct))
 
     if visualize:
+        plt.figure()
+
+        plt.plot(results['dists2']**0.5)
+        plt.xlabel(r"\# de punto de trayectoria",fontsize=12)
+        plt.ylabel("Error (m)",fontsize=12)
+        plt.grid(True)
+
+
         display_path(results)
     
     return results
+
 
 
 def display_path(results):

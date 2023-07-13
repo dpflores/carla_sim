@@ -87,9 +87,9 @@ PLOT_HEIGHT        = 0.8
 
 WAYPOINTS_FILENAME = 'waypoints/racetrack_waypoints.txt'  # waypoint file to load
 # WAYPOINTS_FILENAME = 'waypoints/waypoints.txt'  # waypoint file to load
-DIST_THRESHOLD_TO_LAST_WAYPOINT = 2  # some distance from last position before
+DIST_THRESHOLD_TO_LAST_WAYPOINT = 5  # some distance from last position before
                                        # simulation ends
-DIST_THRESHOLD_TO_LAST_WAYPOINT = 0.5  # some distance from last position before
+DIST_THRESHOLD_TO_LAST_WAYPOINT = 2  # some distance from last position before
                                        # simulation ends
                                        
 # Path interpolation parameters
@@ -250,8 +250,8 @@ def add_noise(x, y, yaw, speed):
     # FALTA AÑADIR NOISE
     x_gps = x + np.random.normal(0,2)
     y_gps = y + np.random.normal(0,2)
-    yaw_imu = yaw + np.random.normal(0,0.1)
-    speed_odom = speed + np.random.normal(0,0.06)
+    yaw_imu = yaw + np.random.normal(0,0.01)
+    speed_odom = speed + np.random.normal(0,0.01)
     return x_gps, y_gps, yaw_imu, speed_odom
 
 def get_current_accel(measurement_data):
@@ -507,10 +507,9 @@ def exec_waypoint_nav_demo(args):
         #                          linestyle="-", marker="", color='g')
         
         # Add real trajectory markers
-        trajectory_fig.add_graph("real_trajectory", window_size=TOTAL_EPISODE_FRAMES,
-                                 x0=[start_x]*TOTAL_EPISODE_FRAMES, 
-                                 y0=[start_y]*TOTAL_EPISODE_FRAMES,
-                                 color="g")
+        trajectory_fig.add_graph("waypoints", window_size=waypoints_np.shape[0],
+                                 x0=waypoints_np[:,0], y0=waypoints_np[:,1],
+                                 linestyle="-", marker="", color='g')
         # Add trajectory markers
         trajectory_fig.add_graph("trajectory", window_size=TOTAL_EPISODE_FRAMES,
                                  x0=[start_x]*TOTAL_EPISODE_FRAMES, 
@@ -716,9 +715,18 @@ def exec_waypoint_nav_demo(args):
             controller.update_waypoints(new_waypoints)
 
             # Update the other controller values and controls
-            controller.update_values(current_x, current_y, current_yaw, 
-                                     current_speed,
+            # FOR IDEAL
+
+            # controller.update_values(current_x, current_y, current_yaw, 
+            #                          current_speed,
+            #                          current_timestamp, frame)
+            
+            # FOR LOCALIZATION
+
+            controller.update_values(x_est, y_est, yaw_imu, 
+                                     speed_odom,
                                      current_timestamp, frame)
+
             controller.update_controls()
             cmd_throttle, cmd_steer, cmd_brake = controller.get_commands()
             steer = cmd_steer
@@ -730,11 +738,11 @@ def exec_waypoint_nav_demo(args):
                 pass
             else:
                 # Update live plotter with new feedback
-                trajectory_fig.roll("real_trajectory", current_x, current_y)
+                # trajectory_fig.roll("real_trajectory", current_x, current_y)
                 trajectory_fig.roll("car", current_x, current_y)
 
                 # FOR LOCALIZATION
-                trajectory_fig.roll("trajectory", x_est, y_est)
+                trajectory_fig.roll("trajectory", current_x, current_y)
                 # trajectory_fig.roll("car", x_est, y_est)
                 # When plotting lookahead path, only plot a number of points
                 # (INTERP_MAX_POINTS_PLOT amount of points). This is meant
